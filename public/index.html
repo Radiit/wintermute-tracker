@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wintermute Top 100 Changes% Holdings - Real-Time Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Track Wintermute's top 100 cryptocurrency holdings with real-time percentage changes and portfolio analytics for ARKM entity." />
+  <meta name="author" content="Wintermute Analytics" />
+  <meta property="og:title" content="Wintermute Top 100 Changes% Holdings - Real-Time Tracker" />
+  <meta property="og:description" content="Track Wintermute's top 100 cryptocurrency holdings with real-time percentage changes and portfolio analytics for ARKM entity." />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg-primary:#0a0e1a;--bg-secondary:#111827;--bg-card:#1a1f2e;--bg-hover:#222938;
+      --text-primary:#f9fafb;--text-secondary:#9ca3af;--text-muted:#6b7280;
+      --border-color:#2d3748;--border-light:#374151;
+      --color-up:#10b981;--color-down:#ef4444;--color-new:#3b82f6;
+      --shadow-lg:0 10px 40px -10px rgba(0,0,0,.6)
+    }
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+      background:linear-gradient(135deg,var(--bg-primary) 0%,var(--bg-secondary) 100%);
+      color:var(--text-primary);min-height:100vh;padding:1.5rem;line-height:1.6;font-variant-numeric:tabular-nums
+    }
+    .container{max-width:1400px;margin:0 auto}
+    header{margin-bottom:1.5rem}
+    h1{
+      font-size:clamp(1.75rem,4vw,2.5rem);font-weight:700;margin-bottom:.5rem;
+      background:linear-gradient(135deg,var(--text-primary) 0%,rgba(249,250,251,.7) 100%);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-.02em
+    }
+    .meta{color:var(--text-secondary);font-size:.9rem;margin-bottom:.5rem}
+    .status-bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.25rem}
+    .status-badge{background:var(--bg-card);border:1px solid var(--border-light);padding:.25rem .75rem;border-radius:.5rem;color:var(--text-secondary);font-size:.8rem}
+    .status-badge.connected{border-color:var(--color-up);color:var(--color-up)}
+
+    /* Controls */
+    .controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin: .75rem 0 1.25rem}
+    .control-group{display:flex;gap:.5rem;align-items:center}
+    .control-group label{color:var(--text-secondary);font-size:.85rem;font-weight:500}
+    .control-group input,.control-group select{
+      background:var(--bg-card);border:1px solid var(--border-light);color:var(--text-primary);
+      padding:.5rem .75rem;border-radius:.5rem;font-size:.85rem;outline:none
+    }
+    .control-group input[type="search"]{min-width:220px}
+    .btn-group{display:flex;gap:.25rem;background:var(--bg-card);border:1px solid var(--border-light);border-radius:.5rem;overflow:hidden}
+    .btn-filter{background:transparent;border:none;color:var(--text-secondary);padding:.5rem .75rem;font-size:.8rem;cursor:pointer}
+    .btn-filter:hover{background:var(--bg-hover)}
+    .btn-filter.active{background:var(--text-primary);color:var(--bg-primary)}
+
+    .table-container{background:var(--bg-card);border-radius:1rem;border:1px solid var(--border-color);overflow:hidden;box-shadow:var(--shadow-lg)}
+    .table-wrapper{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    thead{background:rgba(17,24,39,.8);border-bottom:1px solid var(--border-color);position:sticky;top:0;z-index:10}
+    th{padding:1rem 1.25rem;text-align:right;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);white-space:nowrap}
+    th:first-child,td:first-child{text-align:left;padding-left:1.5rem}
+    th:nth-child(2),td:nth-child(2){text-align:left}
+    th:nth-child(3),td:nth-child(3){text-align:center}
+    th:nth-child(4),td:nth-child(4){text-align:center}
+    th:nth-child(5),td:nth-child(5){text-align:right}
+    th:nth-child(6),td:nth-child(6){text-align:right}
+    th:last-child,td:last-child{padding-right:1.5rem}
+    tbody tr{border-bottom:1px solid var(--border-color);transition:background .15s}
+    tbody tr:hover{background:var(--bg-hover)}
+    td{padding:1rem 1.25rem;font-size:.92rem}
+    td:nth-child(2){font-weight:600}
+    .up{color:var(--color-up);font-weight:600}
+    .down{color:var(--color-down);font-weight:600}
+    .new{color:var(--color-new);font-weight:600}
+    .empty{color:var(--text-muted);text-align:center;padding:1.25rem}
+    footer{margin-top:2rem;text-align:center;color:var(--text-muted);font-size:.85rem}
+
+    @media (max-width:768px){
+      body{padding:1rem}
+      th,td{padding:.75rem .5rem;font-size:.8rem}
+      th:first-child,td:first-child{padding-left:1rem}
+      th:last-child,td:last-child{padding-right:1rem}
+    }
+
+    .table-wrapper::-webkit-scrollbar{height:8px}
+    .table-wrapper::-webkit-scrollbar-track{background:var(--bg-secondary);border-radius:4px}
+    .table-wrapper::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:4px}
+    .table-wrapper::-webkit-scrollbar-thumb:hover{background:#4b5563}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Wintermute Top 100 Changes% Holdings</h1>
+      <div class="meta" id="meta">waiting for data…</div>
+      <div class="status-bar">
+        <span id="status" class="status-badge">disconnected</span>
+      </div>
+    </header>
+
+    <!-- Controls -->
+    <div class="controls">
+      <div class="control-group">
+        <label for="searchInput">Search:</label>
+        <input type="search" id="searchInput" placeholder="Filter by symbol..." />
+      </div>
+
+      <div class="control-group">
+        <label>Filter:</label>
+        <div class="btn-group" id="filterGroup">
+          <button class="btn-filter active" data-filter="all">All</button>
+          <button class="btn-filter" data-filter="up">↑ Up</button>
+          <button class="btn-filter" data-filter="down">↓ Down</button>
+          <button class="btn-filter" data-filter="new">★ New</button>
+          <button class="btn-filter" data-filter="neutral">0% Neutral</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label><input type="checkbox" id="hideZeroPct" /> Hide 0% rows</label>
+      </div>
+
+      <div class="control-group">
+        <label for="sortSelect">Sort:</label>
+         <select id="sortSelect">
+          <option value="default">Δ (High→Low)</option>
+          <option value="symbol-asc">Asset (A–Z)</option>
+          <option value="symbol-desc">Asset (Z–A)</option>
+          <option value="prev-desc">Prev (High→Low)</option>
+          <option value="prev-asc">Prev (Low→High)</option>
+          <option value="now-desc">Now (High→Low)</option>
+          <option value="now-asc">Now (Low→High)</option>
+          <option value="delta-desc">Changes (High→Low)</option>
+          <option value="delta-asc">Changes (Low→High)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <div class="table-wrapper">
+        <table id="tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Asset</th>
+              <th>Prev</th>
+              <th>Now</th>
+              <th>Changes</th>
+              <th>Changes%</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer><p>Real-time data updates via WebSocket</p></footer>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // ===== DOM =====
+    const tbody = document.querySelector('#tbl tbody');
+    const meta = document.getElementById('meta');
+    const statusEl = document.getElementById('status');
+    const lastUpdatedEl = document.getElementById('lastUpdated');
+    const searchInput = document.getElementById('searchInput');
+    const sortSelect = document.getElementById('sortSelect');
+    const filterGroup = document.getElementById('filterGroup');
+    const hideZeroPctEl = document.getElementById('hideZeroPct');
+
+    // ===== State =====
+    let lastTs = null;
+    let rawPayload = null;
+    let currentFilter = 'all';
+    let currentSort = 'default';
+    let currentSearch = '';
+    let hideZeroPct = false;
+
+    // ===== Utils =====
+    const fmt = (n) => {
+      if (n === null || n === undefined) return '—';
+      if (!isFinite(n)) return String(n);
+      const abs = Math.abs(n);
+      const decimals = abs >= 1000 ? 0 : abs >= 100 ? 1 : 2;
+      return n.toLocaleString(undefined, { maximumFractionDigits: decimals });
+    };
+
+    const changeType = (r) => (
+      r.pctChange === null ? 'new' :
+      r.pctChange > 0 ? 'up' :
+      r.pctChange < 0 ? 'down' : 'neutral'
+    );
+
+    // ===== Filter & Sort =====
+    function applyFilters(rows) {
+      let out = rows.slice();
+
+      // search
+      const q = currentSearch.trim().toLowerCase();
+      if (q) out = out.filter(r => String(r.symbol).toLowerCase().includes(q));
+
+      // change type
+      if (currentFilter !== 'all') {
+        out = out.filter(r => changeType(r) === currentFilter);
+      }
+
+      // hide exact 0%
+      if (hideZeroPct) {
+        out = out.filter(r => r.pctChange !== 0);
+      }
+
+      return out;
+    }
+
+    function applySort(rows) {
+      const arr = rows.slice();
+
+      switch (currentSort) {
+        case 'symbol-asc':  arr.sort((a,b)=>a.symbol.localeCompare(b.symbol)); break;
+        case 'symbol-desc': arr.sort((a,b)=>b.symbol.localeCompare(a.symbol)); break;
+        case 'prev-asc':    arr.sort((a,b)=>a.old - b.old); break;
+        case 'prev-desc':   arr.sort((a,b)=>b.old - a.old); break;
+        case 'now-asc':     arr.sort((a,b)=>a.new - b.new); break;
+        case 'now-desc':    arr.sort((a,b)=>b.new - a.new); break;
+        case 'delta-asc':   arr.sort((a,b)=>a.delta - b.delta); break;
+        case 'delta-desc':  arr.sort((a,b)=>b.delta - a.delta); break;
+        case 'default':
+        default:
+          // NEW first, then by |pct| desc
+          arr.sort((a,b)=>{
+            const aNew = (a.pctChange === null), bNew = (b.pctChange === null);
+            if (aNew && !bNew) return -1;
+            if (!aNew && bNew) return 1;
+            const ap = aNew ? Infinity : Math.abs(a.pctChange);
+            const bp = bNew ? Infinity : Math.abs(b.pctChange);
+            if (bp !== ap) return bp - ap;
+            return String(a.symbol).localeCompare(String(b.symbol));
+          });
+      }
+      return arr;
+    }
+
+    // ===== Render =====
+    function renderTable(rows) {
+      tbody.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="empty" colspan="6">No rows match the current filter.</td>`;
+        tbody.appendChild(tr);
+        return;
+      }
+      rows.forEach((r, i) => {
+        const cls = changeType(r); // 'up' | 'down' | 'new' | 'neutral'
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td>${r.symbol}</td>
+          <td>${fmt(r.old)}</td>
+          <td>${fmt(r.new)}</td>
+          <td class="${cls}">${fmt(r.delta)}</td>
+          <td class="${cls}">${r.pctChange === null ? 'NEW' : (r.pctChange.toFixed(2) + '%')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderMeta(p) {
+      meta.textContent = `assets = ${p.totalAssets}`;
+    }
+
+    function pipeline() {
+      if (!rawPayload?.top100) return;
+      const filtered = applyFilters(rawPayload.top100);
+      const sorted   = applySort(filtered);
+      renderTable(sorted);
+    }
+
+    function render(payload) {
+      if (!payload || !payload.top100) { meta.textContent = 'no data yet…'; return; }
+      rawPayload = payload;
+      lastTs = payload.timestamp || null;
+      renderMeta(payload);
+      pipeline();
+    }
+
+    // ===== Events =====
+    searchInput.addEventListener('input', e => {
+      currentSearch = e.target.value;
+      pipeline();
+    });
+
+    sortSelect.addEventListener('change', e => {
+      currentSort = e.target.value;
+      pipeline();
+    });
+
+    filterGroup.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-filter');
+      if (!btn) return;
+      [...filterGroup.querySelectorAll('.btn-filter')].forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      pipeline();
+    });
+
+    hideZeroPctEl.addEventListener('change', e => {
+      hideZeroPct = !!e.target.checked;
+      pipeline();
+    });
+
+     // ===== Socket =====
+     const socket = io();
+     socket.on('connect', () => {
+       statusEl.textContent = 'connected';
+       statusEl.classList.add('connected');
+     });
+     socket.on('update', (d) => { try { render(d); } catch(e){ console.error(e); } });
+     socket.on('disconnect', () => {
+       statusEl.textContent = 'disconnected';
+       statusEl.classList.remove('connected');
+     });
+     socket.on('connect_error', (error) => {
+       console.error('WebSocket connection error:', error);
+       statusEl.textContent = 'connection error';
+       statusEl.classList.remove('connected');
+     });
+
+    // ===== Fallback fetch =====
+    function fetchLatest(){
+      fetch(`/api/latest?_=${Date.now()}`, { cache:'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (!d) return; if (!lastTs || d.timestamp !== lastTs) render(d); })
+        .catch(()=>{});
+    }
+     fetchLatest();
+     setInterval(fetchLatest, 15000);
+  </script>
+</body>
+</html>

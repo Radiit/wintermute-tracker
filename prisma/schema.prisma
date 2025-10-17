@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")  // Pooler 6543
+}
+
+
+model Snapshot {
+  id       BigInt   @id @default(autoincrement())
+  entity   String
+  ts       DateTime @default(now()) @db.Timestamptz(6)
+  holdings Holding[]
+
+  @@index([entity, ts(sort: Desc)])
+}
+
+model Holding {
+  snapshotId BigInt
+  symbol     String
+  amount     Float
+  snapshot   Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@id([snapshotId, symbol])
+  @@index([snapshotId])
+}

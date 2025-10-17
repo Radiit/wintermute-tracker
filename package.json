@@ -1,0 +1,23 @@
+{
+  "name": "wintermute-tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "NODE_ENV=development node server/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:dev": "prisma migrate dev --name init"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0"
+  },
+  "engines": { "node": ">=18" }
+}

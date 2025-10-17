@@ -10,6 +10,9 @@ COPY package*.json ./
 # Install deps (production saja)
 RUN npm ci --omit=dev
 
+# Generate Prisma client
+RUN npx prisma generate
+
 # Copy source code
 COPY . .
 

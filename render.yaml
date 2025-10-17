@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: wintermute-tracker
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: ARKHAM_COOKIE
+        sync: false
+      - key: ARKHAM_UA
+        sync: false
+      - key: ARKHAM_ORIGIN
+        value: https://intel.arkm.com
+      - key: ARKHAM_REFERER
+        value: https://intel.arkm.com/
+      - key: ARKHAM_ACCEPT
+        value: application/json, text/plain, */*
+
+databases:
+  - name: wintermute-db
+    plan: free
+    databaseName: wintermute
+    user: wintermute_user

@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node server/index.js",
+    "start": "npm run prisma:generate && node server/index.js",
     "dev": "NODE_ENV=development node server/index.js",
+    "build": "npm run prisma:generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:dev": "prisma migrate dev --name init"
+    "prisma:dev": "prisma migrate dev --name init",
+    "postinstall": "npm run prisma:generate"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

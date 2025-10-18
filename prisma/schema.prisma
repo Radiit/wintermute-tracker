@@ -22,8 +22,10 @@ model Holding {
   snapshotId BigInt
   symbol     String
   amount     Float
+  usd        Decimal?
   snapshot   Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
   @@id([snapshotId, symbol])
   @@index([snapshotId])
+  @@index([symbol])
 }

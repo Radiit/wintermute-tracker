@@ -36,8 +36,7 @@
     .status-badge{background:var(--bg-card);border:1px solid var(--border-light);padding:.25rem .75rem;border-radius:.5rem;color:var(--text-secondary);font-size:.8rem}
     .status-badge.connected{border-color:var(--color-up);color:var(--color-up)}
 
-    /* Controls */
-    .controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin: .75rem 0 1.25rem}
+    .controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin:.75rem 0 1.25rem}
     .control-group{display:flex;gap:.5rem;align-items:center}
     .control-group label{color:var(--text-secondary);font-size:.85rem;font-weight:500}
     .control-group input,.control-group select{
@@ -83,6 +82,11 @@
     .table-wrapper::-webkit-scrollbar-track{background:var(--bg-secondary);border-radius:4px}
     .table-wrapper::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:4px}
     .table-wrapper::-webkit-scrollbar-thumb:hover{background:#4b5563}
+
+    .pagination{display:flex;justify-content:center;align-items:center;gap:1rem;margin-top:1rem}
+    .btn{padding:.5rem 1rem;background:var(--bg-card);border:1px solid var(--border-light);border-radius:.5rem;color:var(--text-primary);cursor:pointer}
+    .btn:hover{background:var(--bg-hover)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
   </style>
 </head>
 <body>
@@ -92,10 +96,11 @@
       <div class="meta" id="meta">waiting for data…</div>
       <div class="status-bar">
         <span id="status" class="status-badge">disconnected</span>
+        <span id="lastUpdated">Last update: —</span>
+        <span id="countdown">Next in: —</span>
       </div>
     </header>
 
-    <!-- Controls -->
     <div class="controls">
       <div class="control-group">
         <label for="searchInput">Search:</label>
@@ -117,9 +122,14 @@
         <label><input type="checkbox" id="hideZeroPct" /> Hide 0% rows</label>
       </div>
 
+      <!-- NEW: show micro changes -->
+      <div class="control-group">
+        <label><input type="checkbox" id="showMicro" /> Show micro changes</label>
+      </div>
+
       <div class="control-group">
         <label for="sortSelect">Sort:</label>
-         <select id="sortSelect">
+        <select id="sortSelect">
           <option value="default">Δ (High→Low)</option>
           <option value="symbol-asc">Asset (A–Z)</option>
           <option value="symbol-desc">Asset (Z–A)</option>
@@ -151,12 +161,17 @@
       </div>
     </div>
 
+    <div class="pagination" style="display:flex; justify-content:center; align-items:center; gap:1rem; margin-top:1rem;">
+      <button id="prevPage" class="btn" disabled>Prev</button>
+      <span>Page <span id="pageNum">1</span> of <span id="totalPages">1</span></span>
+      <button id="nextPage" class="btn" disabled>Next</button>
+    </div>
+
     <footer><p>Real-time data updates via WebSocket</p></footer>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // ===== DOM =====
     const tbody = document.querySelector('#tbl tbody');
     const meta = document.getElementById('meta');
     const statusEl = document.getElementById('status');
@@ -165,23 +180,54 @@
     const sortSelect = document.getElementById('sortSelect');
     const filterGroup = document.getElementById('filterGroup');
     const hideZeroPctEl = document.getElementById('hideZeroPct');
+    const showMicroEl = document.getElementById('showMicro');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const pageNumEl = document.getElementById('pageNum');
+    const totalPagesEl = document.getElementById('totalPages');
+    const countdownEl = document.getElementById('countdown');
 
-    // ===== State =====
     let lastTs = null;
     let rawPayload = null;
     let currentFilter = 'all';
     let currentSort = 'default';
     let currentSearch = '';
     let hideZeroPct = false;
+    let showMicro = false;
+    let currentPage = 1;
+    let totalPages = 1;
+    const pageSize = 50;
+    let intervalMs = 15000;
+    let wsConnected = false;
+    let lastWsMs = 0;
 
-    // ===== Utils =====
-    const fmt = (n) => {
+    const ABS_DELTA_EPS = 1e-9;   
+    const PCT_EPS       = 1e-6;
+
+    const z0 = (n)=> (Object.is(n, -0) ? 0 : n);
+    function fmtNumber(n){
       if (n === null || n === undefined) return '—';
       if (!isFinite(n)) return String(n);
-      const abs = Math.abs(n);
-      const decimals = abs >= 1000 ? 0 : abs >= 100 ? 1 : 2;
-      return n.toLocaleString(undefined, { maximumFractionDigits: decimals });
-    };
+      const v = z0(n);
+      const abs = Math.abs(v);
+      if (abs === 0) return '0';
+      if (abs >= 1_000_000_000) return v.toExponential(2);
+      if (abs >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      if (abs >= 1) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      if (abs >= 1e-3) return v.toLocaleString(undefined, { maximumFractionDigits: 6 });
+      return v.toExponential(2);
+    }
+    function fmtPct(n){
+      if (n === null || n === undefined) return '—';
+      if (!isFinite(n)) return String(n);
+      const v = z0(n);
+      const abs = Math.abs(v);
+      if (abs === 0) return '0.00%';
+      if (abs >= 100) return v.toFixed(0) + '%';
+      if (abs >= 1) return v.toFixed(2) + '%';
+      if (abs >= 0.01) return v.toFixed(4) + '%';
+      return v.toExponential(2) + '%';
+    }
 
     const changeType = (r) => (
       r.pctChange === null ? 'new' :
@@ -189,30 +235,44 @@
       r.pctChange < 0 ? 'down' : 'neutral'
     );
 
-    // ===== Filter & Sort =====
+    function normalizePayload(p) {
+      if (!p) return null;
+      const rows = p.top100 || p.rows || [];
+      const ts   = p.timestamp || p.ts || null;
+      const ms   = p.intervalMs || (p.countdownSec ? p.countdownSec * 1000 : intervalMs);
+      return {
+        top100: rows,
+        totalAssets: p.totalAssets || rows.length,
+        timestamp: ts,
+        intervalMs: ms,
+        transferTop100: p.transferTop100 || null
+      };
+    }
+
+    function normalizeRowsForView(rows){
+      if (showMicro) return rows;
+      return rows.map(r => {
+        let { old, new: now, delta, pctChange } = r;
+        if (pctChange !== null) {
+          if (Math.abs(delta) < ABS_DELTA_EPS && Math.abs(pctChange) < PCT_EPS) {
+            delta = 0; pctChange = 0;
+          }
+        }
+        return { ...r, old: z0(old), new: z0(now), delta: z0(delta), pctChange };
+      });
+    }
+
     function applyFilters(rows) {
       let out = rows.slice();
-
-      // search
       const q = currentSearch.trim().toLowerCase();
       if (q) out = out.filter(r => String(r.symbol).toLowerCase().includes(q));
-
-      // change type
-      if (currentFilter !== 'all') {
-        out = out.filter(r => changeType(r) === currentFilter);
-      }
-
-      // hide exact 0%
-      if (hideZeroPct) {
-        out = out.filter(r => r.pctChange !== 0);
-      }
-
+      if (currentFilter !== 'all') out = out.filter(r => changeType(r) === currentFilter);
+      if (hideZeroPct) out = out.filter(r => r.pctChange !== 0);
       return out;
     }
 
     function applySort(rows) {
       const arr = rows.slice();
-
       switch (currentSort) {
         case 'symbol-asc':  arr.sort((a,b)=>a.symbol.localeCompare(b.symbol)); break;
         case 'symbol-desc': arr.sort((a,b)=>b.symbol.localeCompare(a.symbol)); break;
@@ -224,7 +284,6 @@
         case 'delta-desc':  arr.sort((a,b)=>b.delta - a.delta); break;
         case 'default':
         default:
-          // NEW first, then by |pct| desc
           arr.sort((a,b)=>{
             const aNew = (a.pctChange === null), bNew = (b.pctChange === null);
             if (aNew && !bNew) return -1;
@@ -238,7 +297,6 @@
       return arr;
     }
 
-    // ===== Render =====
     function renderTable(rows) {
       tbody.innerHTML = '';
       if (!rows.length) {
@@ -248,50 +306,73 @@
         return;
       }
       rows.forEach((r, i) => {
-        const cls = changeType(r); // 'up' | 'down' | 'new' | 'neutral'
+        const cls = changeType(r);
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${i+1}</td>
           <td>${r.symbol}</td>
-          <td>${fmt(r.old)}</td>
-          <td>${fmt(r.new)}</td>
-          <td class="${cls}">${fmt(r.delta)}</td>
-          <td class="${cls}">${r.pctChange === null ? 'NEW' : (r.pctChange.toFixed(2) + '%')}</td>
+          <td>${fmtNumber(r.old)}</td>
+          <td>${fmtNumber(r.new)}</td>
+          <td class="${cls}">${fmtNumber(r.delta)}</td>
+          <td class="${cls}">${r.pctChange === null ? 'NEW' : fmtPct(r.pctChange)}</td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    function renderMeta(p) {
-      meta.textContent = `assets = ${p.totalAssets}`;
-    }
+    function renderMeta(p) { meta.textContent = `assets = ${p.totalAssets}${showMicro ? '' : ' (normalized)'}`; }
 
     function pipeline() {
       if (!rawPayload?.top100) return;
-      const filtered = applyFilters(rawPayload.top100);
+      const base = rawPayload.top100;
+      const viewRows = normalizeRowsForView(base);
+      const filtered = applyFilters(viewRows);
       const sorted   = applySort(filtered);
-      renderTable(sorted);
+      totalPages = Math.ceil(sorted.length / pageSize);
+      totalPagesEl.textContent = totalPages;
+      const paginated = sorted.slice((currentPage-1) * pageSize, currentPage * pageSize);
+      renderTable(paginated);
+      pageNumEl.textContent = currentPage;
+      prevPageBtn.disabled = currentPage === 1;
+      nextPageBtn.disabled = currentPage >= totalPages;
     }
 
     function render(payload) {
-      if (!payload || !payload.top100) { meta.textContent = 'no data yet…'; return; }
-      rawPayload = payload;
-      lastTs = payload.timestamp || null;
-      renderMeta(payload);
-      pipeline();
+      const p = normalizePayload(payload);
+      if (!p) { meta.textContent = 'no data yet…'; return; }
+
+      const tsChanged = p.timestamp !== lastTs;
+
+      // always cache/merge payload (biar transferTop100 ikut kebawa)
+      rawPayload = { ...(rawPayload || {}), ...p };
+
+      if (tsChanged) {
+        lastTs = p.timestamp || null;
+        renderMeta(p);
+        intervalMs = p.intervalMs || intervalMs;
+        lastUpdatedEl.textContent = `Last update: ${p.timestamp || '—'}`;
+        resetCountdown();
+        pipeline();
+      } else {
+        // ts sama: jangan reset countdown; cukup update table bila perlu (mis. toggle micro)
+        pipeline();
+      }
     }
 
-    // ===== Events =====
-    searchInput.addEventListener('input', e => {
-      currentSearch = e.target.value;
-      pipeline();
-    });
+    function resetCountdown() {
+      let timeLeft = Math.max(1, Math.floor((intervalMs || 15000) / 1000));
+      countdownEl.textContent = `Next in: ${timeLeft}s`;
+      clearInterval(window.countdownTimer);
+      window.countdownTimer = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) timeLeft = Math.max(1, Math.floor((intervalMs || 15000) / 1000));
+        countdownEl.textContent = `Next in: ${timeLeft}s`;
+      }, 1000);
+    }
 
-    sortSelect.addEventListener('change', e => {
-      currentSort = e.target.value;
-      pipeline();
-    });
-
+    // ===== Events
+    searchInput.addEventListener('input', e => { currentSearch = e.target.value; pipeline(); });
+    sortSelect.addEventListener('change', e => { currentSort = e.target.value; pipeline(); });
     filterGroup.addEventListener('click', (e) => {
       const btn = e.target.closest('.btn-filter');
       if (!btn) return;
@@ -300,38 +381,55 @@
       currentFilter = btn.dataset.filter;
       pipeline();
     });
+    hideZeroPctEl.addEventListener('change', e => { hideZeroPct = !!e.target.checked; pipeline(); });
+    showMicroEl.addEventListener('change', e => { showMicro = !!e.target.checked; renderMeta(rawPayload||{}); pipeline(); });
+    prevPageBtn.addEventListener('click', () => { if (currentPage > 1) { currentPage--; pipeline(); } });
+    nextPageBtn.addEventListener('click', () => { if (currentPage < totalPages) { currentPage++; pipeline(); } });
 
-    hideZeroPctEl.addEventListener('change', e => {
-      hideZeroPct = !!e.target.checked;
-      pipeline();
+    // ===== Socket
+    const socket = io();
+    socket.on('connect', () => {
+      wsConnected = true;
+      statusEl.textContent = 'connected';
+      statusEl.classList.add('connected');
+    });
+    socket.on('update', (d) => {
+      lastWsMs = Date.now();
+      try {
+        // Hindari reset countdown jika ts tidak berubah
+        const incomingTs = d?.timestamp || d?.ts || null;
+        if (incomingTs && incomingTs === lastTs) {
+          // hanya merge transferTop100 atau meta kecil, tanpa reset
+          const p = normalizePayload(d);
+          rawPayload = { ...(rawPayload || {}), ...p };
+          pipeline();
+          return;
+        }
+        render(d);
+      } catch(e){ console.error(e); }
+    });
+    socket.on('disconnect', () => {
+      wsConnected = false;
+      statusEl.textContent = 'disconnected';
+      statusEl.classList.remove('connected');
+    });
+    socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+      statusEl.textContent = 'connection error';
+      statusEl.classList.remove('connected');
     });
 
-     // ===== Socket =====
-     const socket = io();
-     socket.on('connect', () => {
-       statusEl.textContent = 'connected';
-       statusEl.classList.add('connected');
-     });
-     socket.on('update', (d) => { try { render(d); } catch(e){ console.error(e); } });
-     socket.on('disconnect', () => {
-       statusEl.textContent = 'disconnected';
-       statusEl.classList.remove('connected');
-     });
-     socket.on('connect_error', (error) => {
-       console.error('WebSocket connection error:', error);
-       statusEl.textContent = 'connection error';
-       statusEl.classList.remove('connected');
-     });
-
-    // ===== Fallback fetch =====
+    // ===== Fallback fetch
     function fetchLatest(){
+      const freshHorizon = (intervalMs || 15000) + 2000;
+      if (wsConnected && (Date.now() - lastWsMs) < freshHorizon) return;
       fetch(`/api/latest?_=${Date.now()}`, { cache:'no-store' })
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (!d) return; if (!lastTs || d.timestamp !== lastTs) render(d); })
+        .then(d => { if (!d) return; const n = normalizePayload(d); if (!lastTs || n?.timestamp !== lastTs) render(n); })
         .catch(()=>{});
     }
-     fetchLatest();
-     setInterval(fetchLatest, 15000);
+    fetchLatest();
+    setInterval(fetchLatest, 15000);
   </script>
 </body>
 </html>

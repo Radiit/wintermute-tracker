@@ -1,0 +1,195 @@
+---
+alwaysApply: true
+---
+# Wintermute Entity Tracker - Cursor Rules
+
+## Project Context
+This is a real-time tracking system for Wintermute entity on Arkham Intelligence (ARKM) platform using WebSocket connections.
+
+## Tech Stack
+- **Runtime**: Node.js with Express
+- **Database**: Prisma ORM
+- **Real-time**: Socket.IO
+- **HTTP Client**: Axios
+- **Language**: JavaScript/TypeScript
+
+## Code Style & Standards
+
+### General
+- Use ES6+ features (async/await, arrow functions, destructuring)
+- Prefer `const` over `let`, never use `var`
+- Use meaningful variable names (e.g., `wintermuteTransactions` not `wt`)
+- Add comments for complex logic only
+- Keep functions small and single-purpose
+
+### Error Handling
+- Always use try-catch for async operations
+- Log errors with context: `console.error('Failed to fetch data:', error)`
+- Return proper HTTP status codes (200, 400, 404, 500)
+- Handle Socket.IO connection errors gracefully
+
+### Prisma Best Practices
+- Use Prisma Client singleton pattern
+- Always handle `$disconnect()` on app shutdown
+- Use transactions for related database operations
+- Prefer `findUnique` over `findFirst` when possible
+- Use proper relations instead of manual joins
+
+Example:
+```javascript
+const prisma = new PrismaClient()
+
+// Good
+const transaction = await prisma.transaction.findUnique({
+  where: { id: txId },
+  include: { entity: true }
+})
+
+// Avoid nested queries, use relations
+```
+
+### Express Structure
+- Organize routes by feature: `/routes/transactions.js`, `/routes/entities.js`
+- Use middleware for validation and authentication
+- Keep controllers thin, business logic in services
+- Use proper HTTP methods (GET, POST, PUT, DELETE)
+
+Example structure:
+```
+/src
+  /routes
+  /controllers
+  /services
+  /middlewares
+  /utils
+  /models (Prisma schema)
+```
+
+### Socket.IO Guidelines
+- Namespace sockets by feature: `io.of('/transactions')`
+- Always validate incoming socket data
+- Emit errors to specific clients, not broadcast
+- Use rooms for targeted updates
+- Handle disconnections properly
+
+Example:
+```javascript
+io.on('connection', (socket) => {
+  socket.on('track:wintermute', async (data) => {
+    try {
+      // Validate data first
+      if (!data.entityId) throw new Error('Entity ID required')
+      
+      // Join room for this entity
+      socket.join(`entity:${data.entityId}`)
+      
+      // Emit to this room only
+      io.to(`entity:${data.entityId}`).emit('update', result)
+    } catch (error) {
+      socket.emit('error', { message: error.message })
+    }
+  })
+  
+  socket.on('disconnect', () => {
+    // Cleanup
+  })
+})
+```
+
+### Axios Usage
+- Create axios instance with base configuration
+- Set timeout for all requests (default: 10s)
+- Handle rate limiting from ARKM API
+- Cache responses when appropriate
+- Add request/response interceptors for logging
+
+Example:
+```javascript
+const arkhamClient = axios.create({
+  baseURL: 'https://api.arkhamintelligence.com',
+  timeout: 10000,
+  headers: { 'Authorization': `Bearer ${API_KEY}` }
+})
+
+// Retry on rate limit
+arkhamClient.interceptors.response.use(
+  response => response,
+  async error => {
+    if (error.response?.status === 429) {
+      // Wait and retry
+    }
+    throw error
+  }
+)
+```
+
+## File Naming
+- Routes: `kebab-case.js` (e.g., `wintermute-tracker.js`)
+- Services: `PascalCase.js` (e.g., `EntityService.js`)
+- Utils: `camelCase.js` (e.g., `dataFormatter.js`)
+
+## Environment Variables
+Always use `.env` file for:
+- Database URL
+- API keys (ARKM_API_KEY)
+- Port numbers
+- Socket.IO CORS origins
+
+Never commit `.env` to git.
+
+## Testing Considerations
+- Test socket events before deploying
+- Mock external API calls (Arkham)
+- Test database queries with sample data
+- Verify WebSocket connection handling
+
+## Common Patterns for This Project
+
+### Fetching Wintermute Data
+```javascript
+async function getWintermuteTransactions() {
+  try {
+    const response = await arkhamClient.get('/entities/wintermute/transactions')
+    const transactions = response.data
+    
+    // Store in database
+    await prisma.transaction.createMany({
+      data: transactions,
+      skipDuplicates: true
+    })
+    
+    // Broadcast to connected clients
+    io.emit('transactions:new', transactions)
+    
+    return transactions
+  } catch (error) {
+    console.error('Failed to fetch Wintermute data:', error)
+    throw error
+  }
+}
+```
+
+### Real-time Updates
+```javascript
+// Poll for new data every minute
+setInterval(async () => {
+  const newData = await getWintermuteTransactions()
+  if (newData.length > 0) {
+    io.emit('wintermute:update', newData)
+  }
+}, 60000)
+```
+
+## Performance Tips
+- Use Prisma's connection pooling
+- Limit Socket.IO broadcast frequency
+- Cache frequently accessed data
+- Use database indexes for queries
+- Batch database operations when possible
+
+## Security
+- Validate all inputs (express-validator)
+- Sanitize data before database insertion
+- Use CORS properly for Socket.IO
+- Rate limit API endpoints
+- Never expose API keys in client code

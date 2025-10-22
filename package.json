@@ -1,16 +1,36 @@
 {
   "name": "wintermute-tracker",
   "version": "1.0.0",
+  "description": "Real-time cryptocurrency portfolio tracker for Wintermute entity",
   "type": "module",
+  "main": "server/index.js",
   "scripts": {
     "start": "npm run prisma:generate && node server/index.js",
-    "dev": "NODE_ENV=development node server/index.js",
+    "dev": "NODE_ENV=development LOG_LEVEL=debug node server/index.js",
     "build": "npm run prisma:generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:dev": "prisma migrate dev --name init",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:stats": "node scripts/db-stats.js",
+    "db:cleanup": "node scripts/cleanup-old-snapshots.js",
+    "db:seed": "node scripts/seed.js",
+    "lint": "echo 'No linter configured. Consider adding ESLint.'",
+    "test": "echo 'No tests configured. Consider adding Jest or Vitest.'",
     "postinstall": "npm run prisma:generate"
   },
+  "keywords": [
+    "cryptocurrency",
+    "portfolio",
+    "tracker",
+    "wintermute",
+    "arkham",
+    "real-time",
+    "websocket"
+  ],
+  "author": "Wintermute Analytics Team",
+  "license": "UNLICENSED",
+  "private": true,
   "dependencies": {
     "@prisma/client": "^5.18.0",
     "axios": "^1.7.7",
@@ -21,5 +41,8 @@
   "devDependencies": {
     "prisma": "^5.18.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  }
 }

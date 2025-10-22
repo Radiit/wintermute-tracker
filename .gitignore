@@ -1,4 +1,30 @@
+# Dependencies
 node_modules/
+
+# Environment
 .env
-dist/
+.env.local
+
+# Logs
 *.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build
+dist/
+build/
+
+# Prisma
+.prisma/
+
+# Test coverage
+coverage/
